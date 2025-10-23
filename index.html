@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=3.0, user-scalable=yes">
     <meta name="theme-color" content="#4b6bbe">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -25,6 +25,8 @@
             padding: calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
             max-width: 1000px;
             margin: 0 auto;
+            -webkit-text-size-adjust: 100%;
+            touch-action: manipulation;
         }
 
         /* 顶部第一板块 */
@@ -380,7 +382,7 @@ font-weight: bold;
         }
 
         .plan-name {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: bold;
             color: #28a745;
             font-family: "黑体", sans-serif;
@@ -420,7 +422,7 @@ font-weight: bold;
 
         /* 计划用时输入框样式 */
         .planned-duration {
-            font-size: 15px;
+            font-size: 14px;
             color: #c690ce;
             font-family: "黑体", sans-serif;
             font-weight: bold;
@@ -429,12 +431,12 @@ font-weight: bold;
             border-radius: 4px;
             padding: 2px 4px;
             background: white;
-            width: 66px;
+            width: 63px;
         }
 
         /* 计划用时标签样式 */
         .duration-label {
-            font-size: 15px;
+            font-size: 14px;
             color: #c690ce;
             font-family: "黑体", sans-serif;
             font-weight: bold;
@@ -2536,6 +2538,35 @@ input[type="number"]::-webkit-outer-spin-button,
 input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
+}
+        /* 缩放容器 */
+.zoom-container {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* 防止某些元素在缩放时出现问题 */
+.plan-item, .stat-card, .calendar-day {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+}
+
+/* 移动端缩放优化 */
+@media (max-width: 768px) {
+    body {
+        -webkit-text-size-adjust: none;
+    }
+    
+    /* 确保内容在缩放时保持可读性 */
+    .header-top h1 {
+        font-size: clamp(18px, 5vw, 24px);
+    }
+    
+    .plan-name {
+        font-size: clamp(14px, 4vw, 18px);
+    }
 }
     </style>
 </head>
@@ -6893,9 +6924,148 @@ function cleanupOldData() {
         console.log('已清理过期数据');
     }
 }
+        // 手势缩放功能
+let initialDistance = null;
+let currentScale = 1;
+const minScale = 0.8;
+const maxScale = 3.0;
+
+// 触摸事件处理
+document.addEventListener('touchstart', function(e) {
+    if (e.touches.length === 2) {
+        initialDistance = getDistance(e.touches[0], e.touches[1]);
+    }
+});
+
+document.addEventListener('touchmove', function(e) {
+    if (e.touches.length === 2) {
+        e.preventDefault(); // 阻止默认行为，允许缩放
+        
+        const currentDistance = getDistance(e.touches[0], e.touches[1]);
+        
+        if (initialDistance !== null) {
+            const scale = currentDistance / initialDistance;
+            const newScale = Math.max(minScale, Math.min(maxScale, currentScale * scale));
+            
+            applyScale(newScale);
+        }
+    }
+});
+
+document.addEventListener('touchend', function(e) {
+    if (e.touches.length < 2) {
+        initialDistance = null;
+    }
+});
+
+// 计算两点之间的距离
+function getDistance(touch1, touch2) {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+// 应用缩放变换
+function applyScale(scale) {
+    currentScale = scale;
+    
+    // 对整个body应用缩放
+    document.body.style.transform = `scale(${scale})`;
+    document.body.style.transformOrigin = 'center top';
+    
+    // 调整布局以适应缩放
+    adjustLayoutForScale(scale);
+}
+
+// 调整布局以适应缩放
+function adjustLayoutForScale(scale) {
+    const headerStats = document.querySelector('.header-stats');
+    const contentArea = document.querySelector('.content-area');
+    
+    if (scale > 1.2) {
+        // 放大时调整布局
+        if (headerStats) {
+            headerStats.style.gridTemplateColumns = 'repeat(3, 1fr)';
+        }
+    } else {
+        // 恢复正常布局
+        if (headerStats) {
+            if (window.innerWidth <= 768) {
+                headerStats.style.gridTemplateColumns = 'repeat(3, 1fr)';
+            } else {
+                headerStats.style.gridTemplateColumns = 'repeat(6, 1fr)';
+            }
+        }
+    }
+}
+
+// 双击缩放功能
+let lastTap = 0;
+document.addEventListener('touchend', function(e) {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTap;
+    
+    if (tapLength < 300 && tapLength > 0) {
+        // 双击事件
+        handleDoubleTap();
+        e.preventDefault();
+    }
+    lastTap = currentTime;
+});
+
+function handleDoubleTap() {
+    if (currentScale === 1) {
+        // 放大到1.5倍
+        applyScale(1.5);
+    } else {
+        // 恢复到原始大小
+        applyScale(1);
+    }
+}
+
+// 重置缩放按钮（可选）
+function addZoomControls() {
+    const zoomControls = document.createElement('div');
+    zoomControls.innerHTML = `
+        <div style="position: fixed; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;">
+            <button onclick="zoomIn()" style="width: 50px; height: 50px; border-radius: 50%; background: #4b6bbe; color: white; border: none; font-size: 20px; cursor: pointer;">+</button>
+            <button onclick="zoomOut()" style="width: 50px; height: 50px; border-radius: 50%; background: #4b6bbe; color: white; border: none; font-size: 20px; cursor: pointer;">-</button>
+            <button onclick="resetZoom()" style="width: 50px; height: 50px; border-radius: 50%; background: #fd9400; color: white; border: none; font-size: 14px; cursor: pointer;">重置</button>
+        </div>
+    `;
+    document.body.appendChild(zoomControls);
+}
+
+// 缩放功能函数
+function zoomIn() {
+    const newScale = Math.min(maxScale, currentScale + 0.2);
+    applyScale(newScale);
+}
+
+function zoomOut() {
+    const newScale = Math.max(minScale, currentScale - 0.2);
+    applyScale(newScale);
+}
+
+function resetZoom() {
+    applyScale(1);
+}
+
+// 初始化时添加缩放控件
+document.addEventListener('DOMContentLoaded', function() {
+    addZoomControls();
+    
+    // 监听窗口大小变化，重置缩放
+    window.addEventListener('resize', function() {
+        if (currentScale !== 1) {
+            resetZoom();
+        }
+    });
+});
     </script>
 </body>
 
 </html>
+
 
 
